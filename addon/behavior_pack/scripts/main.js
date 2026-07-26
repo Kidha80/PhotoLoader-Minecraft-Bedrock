@@ -2,7 +2,7 @@ import { world, system } from "@minecraft/server";
 import { ModalFormData } from "@minecraft/server-ui";
 import { PHOTOS, BUILD } from "./photos.js";
 
-const VERSION = "v5";
+const VERSION = "v6";
 const PLACER = "photo:placer";
 const DISPLAY = "photo:display";
 
@@ -77,7 +77,8 @@ function placePhoto(player, block, blockFace, choice) {
         ["photo:id", clampPhotoId(choice.id)],
         ["photo:size", choice.size],
         ["photo:face", info.face],
-        ["photo:glow", !!choice.glow]
+        ["photo:glow", !!choice.glow],
+        ["photo:mirror", !!choice.mirror]
     ]) {
         try {
             ent.setProperty(prop, val);
@@ -106,12 +107,13 @@ function warnStaleOnce(player) {
 
 async function openPicker(player, block, blockFace) {
     try {
-        const prev = lastChoice.get(player.id) ?? { id: 0, size: 2, glow: false };
+        const prev = lastChoice.get(player.id) ?? { id: 0, size: 2, glow: false, mirror: false };
         const form = new ModalFormData()
             .title("Выбор фото")
             .dropdown("Изображение", PHOTOS.map((p) => p.name), clampPhotoId(prev.id))
             .slider("Размер (большая сторона, в блоках)", 0.5, 16, 0.5, prev.size)
-            .toggle("Свечение (видно в темноте)", !!prev.glow);
+            .toggle("Свечение (видно в темноте)", !!prev.glow)
+            .toggle("Зеркально", !!prev.mirror);
         const res = await forceShow(player, form);
         if (res.canceled) {
             if (res.cancelationReason === "UserBusy") {
@@ -119,14 +121,79 @@ async function openPicker(player, block, blockFace) {
             }
             return;
         }
-        const [id, size, glow] = res.formValues;
-        const choice = { id, size, glow };
+        const [id, size, glow, mirror] = res.formValues;
+        const choice = { id, size, glow, mirror };
         lastChoice.set(player.id, choice);
         if (block) placePhoto(player, block, blockFace, choice);
     } catch (e) {
         player.sendMessage("§c[Photo Loader] Ошибка меню: " + e);
     }
 }
+
+// --- камера для скриншота ---
+// Ставит камеру напротив центра фото на дистанции, при которой фото при
+// FOV 60° и экране 16:9 вписывается в кадр целиком, без срезания краёв.
+const cameraLocked = new Set();
+
+function screenshotCamera(player, ent) {
+    const info = PHOTOS[clampPhotoId(ent.getProperty("photo:id"))];
+    const size = ent.getProperty("photo:size");
+    const m = Math.max(info.w, info.h);
+    const W = size * info.w / m;
+    const H = size * info.h / m;
+    const face = ent.getProperty("photo:face");
+    const pos = ent.location;
+    const center = { x: pos.x, y: pos.y + PLANE_LIFT, z: pos.z };
+    let n;
+    if (face === 1) {
+        n = { x: 0, y: 1, z: 0 };
+    } else if (face === 2) {
+        n = { x: 0, y: -1, z: 0 };
+    } else {
+        // Стена: нормаль ±Z при yaw 0, ±X при yaw 90 — берём сторону игрока
+        const yaw = Math.round(ent.getRotation().y / 90) * 90;
+        const alongX = Math.abs(yaw) === 90;
+        if (alongX) {
+            n = { x: Math.sign(player.location.x - center.x) || 1, y: 0, z: 0 };
+        } else {
+            n = { x: 0, y: 0, z: Math.sign(player.location.z - center.z) || 1 };
+        }
+    }
+    const TAN_V = Math.tan(Math.PI / 6);      // половина вертикального FOV 60°
+    const TAN_H = TAN_V * 16 / 9;             // половина горизонтального FOV при 16:9
+    const d = Math.max((H / 2) / TAN_V, (W / 2) / TAN_H);
+    const cam = { x: center.x + n.x * d, y: center.y + n.y * d, z: center.z + n.z * d };
+    try {
+        player.runCommand(
+            `camera @s set minecraft:free pos ${cam.x.toFixed(4)} ${cam.y.toFixed(4)} ${cam.z.toFixed(4)} ` +
+            `facing ${center.x.toFixed(4)} ${center.y.toFixed(4)} ${center.z.toFixed(4)}`
+        );
+        cameraLocked.add(player.id);
+        player.sendMessage(
+            "§b[Photo Loader]§r Камера зафиксирована под скриншот 1920×1080.\n" +
+            "§7Важно: FOV должен быть §f60°§7 (значение по умолчанию, Настройки → Видео → Поле зрения), " +
+            "интерфейс скрой там же (Скрыть HUD).\n" +
+            "§7Сделай скриншот и §fприсядь§7, чтобы вернуть камеру."
+        );
+    } catch (e) {
+        player.sendMessage("§c[Photo Loader] Не удалось зафиксировать камеру: " + e);
+    }
+}
+
+// Возврат камеры по приседанию
+system.runInterval(() => {
+    if (cameraLocked.size === 0) return;
+    for (const p of world.getAllPlayers()) {
+        if (!cameraLocked.has(p.id)) continue;
+        if (p.isSneaking) {
+            cameraLocked.delete(p.id);
+            try {
+                p.runCommand("camera @s clear");
+            } catch {}
+            actionbar(p, "Камера возвращена");
+        }
+    }
+}, 4);
 
 async function openEditor(player, ent) {
     try {
@@ -135,10 +202,12 @@ async function openEditor(player, ent) {
             .dropdown("Изображение", PHOTOS.map((p) => p.name), clampPhotoId(ent.getProperty("photo:id")))
             .slider("Размер (большая сторона, в блоках)", 0.5, 16, 0.5, ent.getProperty("photo:size"))
             .toggle("Свечение (видно в темноте)", ent.getProperty("photo:glow"))
+            .toggle("Зеркально", ent.getProperty("photo:mirror"))
+            .toggle("📷 Камера для скриншота 1920×1080 (нужен FOV 60°)", false)
             .toggle("§cУдалить фото", false);
         const res = await forceShow(player, form);
         if (res.canceled || !ent.isValid()) return;
-        const [id, size, glow, remove] = res.formValues;
+        const [id, size, glow, mirror, camera, remove] = res.formValues;
         if (remove) {
             ent.remove();
             player.playSound("dig.wood");
@@ -148,7 +217,8 @@ async function openEditor(player, ent) {
         for (const [prop, val] of [
             ["photo:id", clampPhotoId(id)],
             ["photo:size", size],
-            ["photo:glow", glow]
+            ["photo:glow", glow],
+            ["photo:mirror", mirror]
         ]) {
             try {
                 ent.setProperty(prop, val);
@@ -158,6 +228,12 @@ async function openEditor(player, ent) {
         }
         if (propFailed) warnStaleOnce(player);
         player.playSound("random.click");
+        if (camera) {
+            // Даём свойствам примениться (размер влияет на дистанцию камеры)
+            system.runTimeout(() => {
+                if (ent.isValid()) screenshotCamera(player, ent);
+            }, 2);
+        }
     } catch (e) {
         player.sendMessage("§c[Photo Loader] Ошибка меню: " + e);
     }

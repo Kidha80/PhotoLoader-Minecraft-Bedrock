@@ -134,20 +134,20 @@ function renderList() {
 
 // ---------- генерация файлов аддона ----------
 
-function geometryFor(p, id) {
+function geometryFor(p, id, mirrored) {
   const m = Math.max(p.w, p.h);
   const wu = +(16 * p.w / m).toFixed(4), hu = +(16 * p.h / m).toFixed(4);
   const lift = 7.2;
+  const uv = mirrored
+    ? { south: { uv: [0, 0], uv_size: [p.w, p.h] }, north: { uv: [p.w, 0], uv_size: [-p.w, p.h] } }
+    : { south: { uv: [p.w, 0], uv_size: [-p.w, p.h] }, north: { uv: [0, 0], uv_size: [p.w, p.h] } };
   return {
-    description: { identifier: 'geometry.photo_' + id, texture_width: p.w, texture_height: p.h },
+    description: { identifier: 'geometry.photo_' + id + (mirrored ? '_m' : ''), texture_width: p.w, texture_height: p.h },
     bones: [{
       name: 'root', pivot: [0, lift, 0],
       cubes: [{
         origin: [-wu / 2, +(lift - hu / 2).toFixed(4), 0], size: [wu, hu, 0],
-        uv: {
-          south: { uv: [0, 0], uv_size: [p.w, p.h] },
-          north: { uv: [p.w, 0], uv_size: [-p.w, p.h] }
-        }
+        uv
       }]
     }]
   };
@@ -158,12 +158,13 @@ function buildDerived(version) {
   const n = photos.length;
   files['RP/models/entity/photos.geo.json'] = jsonBytes({
     format_version: '1.12.0',
-    'minecraft:geometry': photos.map((p, i) => geometryFor(p, i))
+    'minecraft:geometry': photos.flatMap((p, i) => [geometryFor(p, i, false), geometryFor(p, i, true)])
   });
   const textures = {}, geos = {};
   photos.forEach((p, i) => {
     textures['photo_' + i] = 'textures/photos/photo_' + i;
     geos['photo_' + i] = 'geometry.photo_' + i;
+    geos['photo_' + i + '_m'] = 'geometry.photo_' + i + '_m';
     files['RP/textures/photos/photo_' + i + '.png'] = p.data;
   });
   files['RP/entity/photo_display.entity.json'] = jsonBytes({
@@ -185,9 +186,9 @@ function buildDerived(version) {
       'controller.render.photo_display': {
         arrays: {
           textures: { 'Array.photos': photos.map((_, i) => 'Texture.photo_' + i) },
-          geometries: { 'Array.geos': photos.map((_, i) => 'Geometry.photo_' + i) }
+          geometries: { 'Array.geos': photos.flatMap((_, i) => ['Geometry.photo_' + i, 'Geometry.photo_' + i + '_m']) }
         },
-        geometry: "Array.geos[q.property('photo:id')]",
+        geometry: "Array.geos[q.property('photo:id') * 2 + (q.property('photo:mirror') ? 1 : 0)]",
         materials: [{ '*': "q.property('photo:glow') ? Material.glow : Material.default" }],
         textures: ["Array.photos[q.property('photo:id')]"]
       }
@@ -208,7 +209,8 @@ function buildDerived(version) {
           'photo:id':   { type: 'int', range: [0, Math.max(n - 1, 1)], default: 0, client_sync: true },
           'photo:size': { type: 'float', range: ['__F_MIN__', '__F_MAX__'], default: '__F_DEF__', client_sync: true },
           'photo:face': { type: 'int', range: [0, 2], default: 0, client_sync: true },
-          'photo:glow': { type: 'bool', default: false, client_sync: true }
+          'photo:glow': { type: 'bool', default: false, client_sync: true },
+          'photo:mirror': { type: 'bool', default: false, client_sync: true }
         }
       },
       components: {
