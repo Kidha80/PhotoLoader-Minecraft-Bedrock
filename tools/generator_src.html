@@ -200,7 +200,8 @@ function buildDerived() {
         identifier: 'photo:display',
         is_spawnable: false, is_summonable: true,
         properties: {
-          'photo:id':   { type: 'int', range: [0, Math.max(n - 1, 0)], default: 0, client_sync: true },
+          // range [0,0] движок отвергает и не грузит все свойства сущности
+          'photo:id':   { type: 'int', range: [0, Math.max(n - 1, 1)], default: 0, client_sync: true },
           'photo:size': { type: 'float', range: [0.25, 16.0], default: 2.0, client_sync: true },
           'photo:face': { type: 'int', range: [0, 2], default: 0, client_sync: true },
           'photo:glow': { type: 'bool', default: false, client_sync: true }

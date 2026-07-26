@@ -204,7 +204,9 @@ def regen_derived(reg):
                 "properties": {
                     "photo:id": {
                         "type": "int",
-                        "range": [0, max(n - 1, 0)],
+                        # range [0,0] движок отвергает ("range max is less than
+                        # range min") и тогда не грузит все свойства сущности
+                        "range": [0, max(n - 1, 1)],
                         "default": 0,
                         "client_sync": True,
                     },
