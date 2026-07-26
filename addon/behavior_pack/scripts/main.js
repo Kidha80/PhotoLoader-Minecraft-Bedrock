@@ -2,6 +2,7 @@ import { world, system } from "@minecraft/server";
 import { ModalFormData } from "@minecraft/server-ui";
 import { PHOTOS } from "./photos.js";
 
+const VERSION = "v3";
 const PLACER = "photo:placer";
 const DISPLAY = "photo:display";
 
@@ -10,8 +11,10 @@ const DISPLAY = "photo:display";
 const PLANE_LIFT = 0.45;
 const GAP = 0.03;
 
-// Последний выбор игрока: id фото и размер (id игрока -> {id, size, glow})
+// Последний выбор игрока: id фото, размер, свечение
 const lastChoice = new Map();
+// Защита от двойного срабатывания itemUse + itemUseOn на один тап
+const lastUseTick = new Map();
 
 const FACE_INFO = {
     Up: { normal: [0, 1, 0], face: 1 },
@@ -22,12 +25,19 @@ const FACE_INFO = {
     West: { normal: [-1, 0, 0], face: 0, yaw: 90 }
 };
 
+function actionbar(player, text) {
+    try {
+        player.onScreenDisplay.setActionBar(text);
+    } catch {}
+}
+
 // Форма может не открыться сразу после клика (UserBusy) — повторяем попытки.
-async function forceShow(player, form, retries = 20) {
+async function forceShow(player, form, retries = 40) {
     const res = await form.show(player);
     if (res.canceled && res.cancelationReason === "UserBusy" && retries > 0) {
+        if (retries % 10 === 0) actionbar(player, "Открываю меню…");
         return new Promise((resolve) =>
-            system.runTimeout(() => resolve(forceShow(player, form, retries - 1)), 5)
+            system.runTimeout(() => resolve(forceShow(player, form, retries - 1)), 4)
         );
     }
     return res;
@@ -59,45 +69,76 @@ function placePhoto(player, block, blockFace, choice) {
         ent.setProperty("photo:face", info.face);
         ent.setProperty("photo:glow", !!choice.glow);
         player.playSound("random.pop");
+        actionbar(player, "Фото размещено. Присесть+тап — меню, тап по фото — настройка");
     } catch (e) {
-        player.sendMessage("§cНе удалось разместить фото: " + e);
+        player.sendMessage("§c[Photo Loader] Не удалось разместить фото: " + e);
     }
 }
 
 async function openPicker(player, block, blockFace) {
-    const prev = lastChoice.get(player.id) ?? { id: 0, size: 2, glow: false };
-    const form = new ModalFormData()
-        .title("Выбор фото")
-        .dropdown("Изображение", PHOTOS.map((p) => p.name), clampPhotoId(prev.id))
-        .slider("Размер (большая сторона, в блоках)", 0.5, 16, 0.5, prev.size)
-        .toggle("Свечение (видно в темноте)", !!prev.glow);
-    const res = await forceShow(player, form);
-    if (res.canceled) return;
-    const [id, size, glow] = res.formValues;
-    const choice = { id, size, glow };
-    lastChoice.set(player.id, choice);
-    if (block) placePhoto(player, block, blockFace, choice);
+    try {
+        const prev = lastChoice.get(player.id) ?? { id: 0, size: 2, glow: false };
+        const form = new ModalFormData()
+            .title("Выбор фото")
+            .dropdown("Изображение", PHOTOS.map((p) => p.name), clampPhotoId(prev.id))
+            .slider("Размер (большая сторона, в блоках)", 0.5, 16, 0.5, prev.size)
+            .toggle("Свечение (видно в темноте)", !!prev.glow);
+        const res = await forceShow(player, form);
+        if (res.canceled) {
+            if (res.cancelationReason === "UserBusy") {
+                player.sendMessage("§e[Photo Loader] Меню не открылось. Закрой все окна и попробуй ещё раз.");
+            }
+            return;
+        }
+        const [id, size, glow] = res.formValues;
+        const choice = { id, size, glow };
+        lastChoice.set(player.id, choice);
+        if (block) placePhoto(player, block, blockFace, choice);
+    } catch (e) {
+        player.sendMessage("§c[Photo Loader] Ошибка меню: " + e);
+    }
 }
 
 async function openEditor(player, ent) {
-    const form = new ModalFormData()
-        .title("Настройка фото")
-        .dropdown("Изображение", PHOTOS.map((p) => p.name), clampPhotoId(ent.getProperty("photo:id")))
-        .slider("Размер (большая сторона, в блоках)", 0.5, 16, 0.5, ent.getProperty("photo:size"))
-        .toggle("Свечение (видно в темноте)", ent.getProperty("photo:glow"))
-        .toggle("§cУдалить фото", false);
-    const res = await forceShow(player, form);
-    if (res.canceled || !ent.isValid()) return;
-    const [id, size, glow, remove] = res.formValues;
-    if (remove) {
-        ent.remove();
-        player.playSound("dig.wood");
+    try {
+        const form = new ModalFormData()
+            .title("Настройка фото")
+            .dropdown("Изображение", PHOTOS.map((p) => p.name), clampPhotoId(ent.getProperty("photo:id")))
+            .slider("Размер (большая сторона, в блоках)", 0.5, 16, 0.5, ent.getProperty("photo:size"))
+            .toggle("Свечение (видно в темноте)", ent.getProperty("photo:glow"))
+            .toggle("§cУдалить фото", false);
+        const res = await forceShow(player, form);
+        if (res.canceled || !ent.isValid()) return;
+        const [id, size, glow, remove] = res.formValues;
+        if (remove) {
+            ent.remove();
+            player.playSound("dig.wood");
+            return;
+        }
+        ent.setProperty("photo:id", clampPhotoId(id));
+        ent.setProperty("photo:size", size);
+        ent.setProperty("photo:glow", glow);
+        player.playSound("random.click");
+    } catch (e) {
+        player.sendMessage("§c[Photo Loader] Ошибка меню: " + e);
+    }
+}
+
+function handleUse(player, block, blockFace) {
+    // itemUse и itemUseOn могут прийти на один и тот же тап
+    const tick = system.currentTick;
+    const prev = lastUseTick.get(player.id);
+    if (prev !== undefined && tick - prev < 4) return;
+    lastUseTick.set(player.id, tick);
+
+    if (player.isSneaking) {
+        openPicker(player, block, blockFace);
         return;
     }
-    ent.setProperty("photo:id", clampPhotoId(id));
-    ent.setProperty("photo:size", size);
-    ent.setProperty("photo:glow", glow);
-    player.playSound("random.click");
+    // Обычный тап ставит фото сразу, без меню — форма не нужна для основного действия
+    const choice = lastChoice.get(player.id) ?? { id: 0, size: 2, glow: false };
+    lastChoice.set(player.id, choice);
+    placePhoto(player, block, blockFace, choice);
 }
 
 // Одна недоступная фича (например, на старой версии игры) не должна
@@ -114,12 +155,21 @@ safeSubscribe(world.afterEvents.itemUseOn, "itemUseOn", (ev) => {
     const player = ev.source;
     if (!player || player.typeId !== "minecraft:player") return;
     if (!ev.itemStack || ev.itemStack.typeId !== PLACER) return;
-    const choice = lastChoice.get(player.id);
-    if (player.isSneaking || !choice) {
-        openPicker(player, ev.block, ev.blockFace);
-    } else {
-        placePhoto(player, ev.block, ev.blockFace, choice);
+    handleUse(player, ev.block, ev.blockFace);
+});
+
+// Запасной путь: если itemUseOn на устройстве не сработал, ловим общий
+// itemUse и находим блок лучом из камеры.
+safeSubscribe(world.afterEvents.itemUse, "itemUse", (ev) => {
+    const player = ev.source;
+    if (!player || player.typeId !== "minecraft:player") return;
+    if (!ev.itemStack || ev.itemStack.typeId !== PLACER) return;
+    const hit = player.getBlockFromViewDirection({ maxDistance: 8 });
+    if (!hit || !hit.face) {
+        actionbar(player, "Наведись на блок не дальше 8 блоков");
+        return;
     }
+    handleUse(player, hit.block, hit.face);
 });
 
 safeSubscribe(world.beforeEvents.playerInteractWithEntity, "playerInteractWithEntity", (ev) => {
@@ -129,14 +179,19 @@ safeSubscribe(world.beforeEvents.playerInteractWithEntity, "playerInteractWithEn
     system.run(() => openEditor(player, target));
 });
 
+const greeted = new Set();
 safeSubscribe(world.afterEvents.playerSpawn, "playerSpawn", (ev) => {
     if (!ev.initialSpawn) return;
     const player = ev.player;
+    if (greeted.has(player.id)) return;
+    greeted.add(player.id);
+    // Короткая строка при каждом входе — по ней видно, что скрипты работают
+    player.sendMessage(`§b[Photo Loader]§r ${VERSION} активен, фото в паке: ${PHOTOS.length}`);
     if (player.getDynamicProperty("photo:tip_shown")) return;
     player.setDynamicProperty("photo:tip_shown", true);
     player.sendMessage(
         "§b[Photo Loader]§r Скрафти §eФоторамку§r (8 бумаги + стеклянная панель) или возьми через §e/give @s photo:placer§r.\n" +
-        "Нажми ей по любой поверхности — выберешь фото и размер. Обычный клик — ставит с прошлыми настройками, §eприсев§r — снова открывает выбор.\n" +
-        "Клик по центру фото — настройка или удаление."
+        "Тап по поверхности — ставит фото. §eПрисев§r + тап — меню выбора фото и размера.\n" +
+        "Тап по центру размещённого фото — настройка или удаление."
     );
 });
