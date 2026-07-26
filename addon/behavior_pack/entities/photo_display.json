@@ -37,6 +37,11 @@
           "type": "bool",
           "default": false,
           "client_sync": true
+        },
+        "photo:mirror": {
+          "type": "bool",
+          "default": false,
+          "client_sync": true
         }
       }
     },

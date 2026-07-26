@@ -97,21 +97,34 @@ def remove_photo(reg, rid):
     tmp.rmdir()
 
 
-def geometry_for(p):
+def geometry_for(p, mirrored):
     """Плоскость: большая сторона = 16 юнитов (1 блок при размере 1).
 
     Центр плоскости поднят до y=7.2 (0.45 блока), чтобы хитбокс сущности
     накрывал центр фото. Масштаб и поворот идут вокруг пивота — центра.
+    На каждое фото две геометрии: обычная и зеркальная (photo:mirror).
     """
     m = max(p["w"], p["h"])
     w_units = round(16.0 * p["w"] / m, 4)
     h_units = round(16.0 * p["h"] / m, 4)
     lift = 7.2
+    w, h = p["w"], p["h"]
+    if mirrored:
+        uv = {
+            "south": {"uv": [0, 0], "uv_size": [w, h]},
+            "north": {"uv": [w, 0], "uv_size": [-w, h]},
+        }
+    else:
+        uv = {
+            "south": {"uv": [w, 0], "uv_size": [-w, h]},
+            "north": {"uv": [0, 0], "uv_size": [w, h]},
+        }
+    suffix = "_m" if mirrored else ""
     return {
         "description": {
-            "identifier": f"geometry.photo_{p['id']}",
-            "texture_width": p["w"],
-            "texture_height": p["h"],
+            "identifier": f"geometry.photo_{p['id']}{suffix}",
+            "texture_width": w,
+            "texture_height": h,
         },
         "bones": [
             {
@@ -121,10 +134,7 @@ def geometry_for(p):
                     {
                         "origin": [-w_units / 2, round(lift - h_units / 2, 4), 0],
                         "size": [w_units, h_units, 0],
-                        "uv": {
-                            "south": {"uv": [0, 0], "uv_size": [p["w"], p["h"]]},
-                            "north": {"uv": [p["w"], 0], "uv_size": [-p["w"], p["h"]]},
-                        },
+                        "uv": uv,
                     }
                 ],
             }
@@ -143,10 +153,12 @@ def regen_derived(reg, version):
         sys.exit("В реестре нет ни одного фото")
     n = len(photos)
 
-    # --- RP: геометрия ---
+    # --- RP: геометрия (обычная + зеркальная на каждое фото) ---
     geo = {
         "format_version": "1.12.0",
-        "minecraft:geometry": [geometry_for(p) for p in photos],
+        "minecraft:geometry": [
+            geometry_for(p, mirrored) for p in photos for mirrored in (False, True)
+        ],
     }
     write_json(RP / "models" / "entity" / "photos.geo.json", geo)
 
@@ -165,7 +177,9 @@ def regen_derived(reg, version):
                     for p in photos
                 },
                 "geometry": {
-                    f"photo_{p['id']}": f"geometry.photo_{p['id']}" for p in photos
+                    f"photo_{p['id']}{s}": f"geometry.photo_{p['id']}{s}"
+                    for p in photos
+                    for s in ("", "_m")
                 },
                 "animations": {"transform": "animation.photo_display.transform"},
                 "scripts": {"animate": ["transform"]},
@@ -185,10 +199,14 @@ def regen_derived(reg, version):
                         "Array.photos": [f"Texture.photo_{p['id']}" for p in photos]
                     },
                     "geometries": {
-                        "Array.geos": [f"Geometry.photo_{p['id']}" for p in photos]
+                        "Array.geos": [
+                            f"Geometry.photo_{p['id']}{s}"
+                            for p in photos
+                            for s in ("", "_m")
+                        ]
                     },
                 },
-                "geometry": "Array.geos[q.property('photo:id')]",
+                "geometry": "Array.geos[q.property('photo:id') * 2 + (q.property('photo:mirror') ? 1 : 0)]",
                 "materials": [
                     {"*": "q.property('photo:glow') ? Material.glow : Material.default"}
                 ],
@@ -228,6 +246,11 @@ def regen_derived(reg, version):
                         "client_sync": True,
                     },
                     "photo:glow": {
+                        "type": "bool",
+                        "default": False,
+                        "client_sync": True,
+                    },
+                    "photo:mirror": {
                         "type": "bool",
                         "default": False,
                         "client_sync": True,

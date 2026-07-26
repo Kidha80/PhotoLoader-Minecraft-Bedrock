@@ -11,7 +11,8 @@
         "photo_0": "textures/photos/photo_0"
       },
       "geometry": {
-        "photo_0": "geometry.photo_0"
+        "photo_0": "geometry.photo_0",
+        "photo_0_m": "geometry.photo_0_m"
       },
       "animations": {
         "transform": "animation.photo_display.transform"

@@ -10,11 +10,12 @@
         },
         "geometries": {
           "Array.geos": [
-            "Geometry.photo_0"
+            "Geometry.photo_0",
+            "Geometry.photo_0_m"
           ]
         }
       },
-      "geometry": "Array.geos[q.property('photo:id')]",
+      "geometry": "Array.geos[q.property('photo:id') * 2 + (q.property('photo:mirror') ? 1 : 0)]",
       "materials": [
         {
           "*": "q.property('photo:glow') ? Material.glow : Material.default"
