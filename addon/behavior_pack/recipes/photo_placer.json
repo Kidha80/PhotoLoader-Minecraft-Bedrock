@@ -1,0 +1,24 @@
+{
+    "format_version": "1.20.10",
+    "minecraft:recipe_shaped": {
+        "description": {
+            "identifier": "photo:placer_recipe"
+        },
+        "tags": ["crafting_table"],
+        "pattern": [
+            "###",
+            "#G#",
+            "###"
+        ],
+        "key": {
+            "#": { "item": "minecraft:paper" },
+            "G": { "item": "minecraft:glass_pane" }
+        },
+        "unlock": [
+            { "item": "minecraft:paper" }
+        ],
+        "result": {
+            "item": "photo:placer"
+        }
+    }
+}

@@ -1,0 +1,9 @@
+{
+    "resource_pack_name": "photo_loader",
+    "texture_name": "atlas.items",
+    "texture_data": {
+        "photo_placer": {
+            "textures": "textures/items/photo_placer"
+        }
+    }
+}
