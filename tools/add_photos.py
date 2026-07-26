@@ -132,7 +132,12 @@ def geometry_for(p):
     }
 
 
-def regen_derived(reg):
+def compute_version():
+    minutes = int(time.time() // 60)
+    return [1, (minutes >> 16) & 0xFFFF, minutes & 0xFFFF]
+
+
+def regen_derived(reg, version):
     photos = reg["photos"]
     if not photos:
         sys.exit("В реестре нет ни одного фото")
@@ -204,7 +209,9 @@ def regen_derived(reg):
                 "properties": {
                     "photo:id": {
                         "type": "int",
-                        "range": [0, max(n - 1, 0)],
+                        # range [0,0] движок отвергает ("range max is less than
+                        # range min") и тогда не грузит все свойства сущности
+                        "range": [0, max(n - 1, 1)],
                         "default": 0,
                         "client_sync": True,
                     },
@@ -250,8 +257,10 @@ def regen_derived(reg):
         f"    {{ name: {json.dumps(p['name'], ensure_ascii=False)}, w: {p['w']}, h: {p['h']} }}"
         for p in photos
     )
+    build = f"{version[1]}.{version[2]}"
     (BP / "scripts" / "photos.js").write_text(
         "// Этот файл генерируется автоматически (tools/add_photos.py / generator.html)\n"
+        f"export const BUILD = \"{build}\";\n"
         f"export const PHOTOS = [\n{entries}\n];\n",
         encoding="utf-8",
     )
@@ -264,10 +273,8 @@ def write_json(path, data):
     )
 
 
-def bump_versions():
+def bump_versions(version):
     """Поднимает версию паков, чтобы Minecraft обновил кэш при переустановке."""
-    minutes = int(time.time() // 60)
-    version = [1, (minutes >> 16) & 0xFFFF, minutes & 0xFFFF]
     for pack in (RP, BP):
         mf = json.loads((pack / "manifest.json").read_text(encoding="utf-8"))
         mf["header"]["version"] = version
@@ -319,8 +326,9 @@ def main():
         return
 
     save_registry(reg)
-    regen_derived(reg)
-    bump_versions()
+    version = compute_version()
+    regen_derived(reg, version)
+    bump_versions(version)
     build_mcaddon()
 
 
