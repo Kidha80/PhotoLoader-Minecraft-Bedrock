@@ -100,7 +100,17 @@ async function openEditor(player, ent) {
     player.playSound("random.click");
 }
 
-world.afterEvents.itemUseOn.subscribe((ev) => {
+// Одна недоступная фича (например, на старой версии игры) не должна
+// убивать весь скрипт — каждая подписка изолирована.
+function safeSubscribe(signal, name, handler) {
+    try {
+        signal.subscribe(handler);
+    } catch (e) {
+        console.error(`[Photo Loader] не удалось подписаться на ${name}: ${e}`);
+    }
+}
+
+safeSubscribe(world.afterEvents.itemUseOn, "itemUseOn", (ev) => {
     const player = ev.source;
     if (!player || player.typeId !== "minecraft:player") return;
     if (!ev.itemStack || ev.itemStack.typeId !== PLACER) return;
@@ -112,14 +122,14 @@ world.afterEvents.itemUseOn.subscribe((ev) => {
     }
 });
 
-world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+safeSubscribe(world.beforeEvents.playerInteractWithEntity, "playerInteractWithEntity", (ev) => {
     if (ev.target.typeId !== DISPLAY) return;
     ev.cancel = true;
     const { player, target } = ev;
     system.run(() => openEditor(player, target));
 });
 
-world.afterEvents.playerSpawn.subscribe((ev) => {
+safeSubscribe(world.afterEvents.playerSpawn, "playerSpawn", (ev) => {
     if (!ev.initialSpawn) return;
     const player = ev.player;
     if (player.getDynamicProperty("photo:tip_shown")) return;
