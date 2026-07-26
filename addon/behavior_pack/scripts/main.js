@@ -2,7 +2,7 @@ import { world, system } from "@minecraft/server";
 import { ModalFormData } from "@minecraft/server-ui";
 import { PHOTOS, BUILD } from "./photos.js";
 
-const VERSION = "v4";
+const VERSION = "v5";
 const PLACER = "photo:placer";
 const DISPLAY = "photo:display";
 

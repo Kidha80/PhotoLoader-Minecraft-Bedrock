@@ -193,7 +193,11 @@ function buildDerived(version) {
       }
     }
   });
-  files['BP/entities/photo_display.json'] = jsonBytes({
+  // ВАЖНО: движок требует дробные литералы у float-свойств ("default": 2
+  // вместо 2.0 роняет все свойства сущности), а JSON.stringify отбрасывает
+  // ".0" — поэтому float-значения подставляются строками-плейсхолдерами
+  // и заменяются на литералы после сериализации.
+  const bpEntity = {
     format_version: '1.21.0',
     'minecraft:entity': {
       description: {
@@ -202,7 +206,7 @@ function buildDerived(version) {
         properties: {
           // range [0,0] движок отвергает и не грузит все свойства сущности
           'photo:id':   { type: 'int', range: [0, Math.max(n - 1, 1)], default: 0, client_sync: true },
-          'photo:size': { type: 'float', range: [0.25, 16.0], default: 2.0, client_sync: true },
+          'photo:size': { type: 'float', range: ['__F_MIN__', '__F_MAX__'], default: '__F_DEF__', client_sync: true },
           'photo:face': { type: 'int', range: [0, 2], default: 0, client_sync: true },
           'photo:glow': { type: 'bool', default: false, client_sync: true }
         }
@@ -219,7 +223,12 @@ function buildDerived(version) {
         'minecraft:health': { value: 10, max: 10 }
       }
     }
-  });
+  };
+  files['BP/entities/photo_display.json'] = strBytes(
+    (JSON.stringify(bpEntity, null, 2) + '\n')
+      .replace('"__F_MIN__"', '0.25')
+      .replace('"__F_MAX__"', '16.0')
+      .replace('"__F_DEF__"', '2.0'));
   files['BP/scripts/photos.js'] = strBytes(
     '// Этот файл сгенерирован generator.html\n' +
     'export const BUILD = ' + JSON.stringify(version[1] + '.' + version[2]) + ';\n' +
