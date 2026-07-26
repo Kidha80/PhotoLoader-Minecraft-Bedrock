@@ -1,8 +1,8 @@
 import { world, system } from "@minecraft/server";
 import { ModalFormData } from "@minecraft/server-ui";
-import { PHOTOS } from "./photos.js";
+import { PHOTOS, BUILD } from "./photos.js";
 
-const VERSION = "v3";
+const VERSION = "v4";
 const PLACER = "photo:placer";
 const DISPLAY = "photo:display";
 
@@ -61,18 +61,47 @@ function placePhoto(player, block, blockFace, choice) {
         // На полу/потолке поворачиваем картинку по взгляду игрока (кратно 90°)
         yaw = Math.round(player.getRotation().y / 90) * 90;
     }
+    let ent;
     try {
-        const ent = block.dimension.spawnEntity(DISPLAY, loc);
+        ent = block.dimension.spawnEntity(DISPLAY, loc);
         ent.teleport(loc, { rotation: { x: 0, y: yaw } });
-        ent.setProperty("photo:id", clampPhotoId(choice.id));
-        ent.setProperty("photo:size", choice.size);
-        ent.setProperty("photo:face", info.face);
-        ent.setProperty("photo:glow", !!choice.glow);
-        player.playSound("random.pop");
-        actionbar(player, "Фото размещено. Присесть+тап — меню, тап по фото — настройка");
     } catch (e) {
         player.sendMessage("§c[Photo Loader] Не удалось разместить фото: " + e);
+        return;
     }
+    // Свойства ставим по одному: если у мира осталась старая версия пака
+    // со сломанными свойствами, фото всё равно появится (с настройками
+    // по умолчанию), а игрок получит подсказку, как это починить.
+    let propFailed = false;
+    for (const [prop, val] of [
+        ["photo:id", clampPhotoId(choice.id)],
+        ["photo:size", choice.size],
+        ["photo:face", info.face],
+        ["photo:glow", !!choice.glow]
+    ]) {
+        try {
+            ent.setProperty(prop, val);
+        } catch {
+            propFailed = true;
+        }
+    }
+    if (propFailed) {
+        warnStaleOnce(player);
+    } else {
+        actionbar(player, "Фото размещено. Присесть+тап — меню, тап по фото — настройка");
+    }
+    player.playSound("random.pop");
+}
+
+let staleWarned = false;
+function warnStaleOnce(player) {
+    if (staleWarned) return;
+    staleWarned = true;
+    player.sendMessage(
+        "§e[Photo Loader] В этом мире активна старая версия пака — настройки фото не применяются.\n" +
+        "§eИсправление: выйди из мира → Настройки → Хранилище → удали ВСЕ версии Photo Loader BP и RP → " +
+        "открой свежий PhotoLoader.mcaddon → в настройках мира включи паки заново."
+    );
 }
 
 async function openPicker(player, block, blockFace) {
@@ -115,9 +144,19 @@ async function openEditor(player, ent) {
             player.playSound("dig.wood");
             return;
         }
-        ent.setProperty("photo:id", clampPhotoId(id));
-        ent.setProperty("photo:size", size);
-        ent.setProperty("photo:glow", glow);
+        let propFailed = false;
+        for (const [prop, val] of [
+            ["photo:id", clampPhotoId(id)],
+            ["photo:size", size],
+            ["photo:glow", glow]
+        ]) {
+            try {
+                ent.setProperty(prop, val);
+            } catch {
+                propFailed = true;
+            }
+        }
+        if (propFailed) warnStaleOnce(player);
         player.playSound("random.click");
     } catch (e) {
         player.sendMessage("§c[Photo Loader] Ошибка меню: " + e);
@@ -186,7 +225,8 @@ safeSubscribe(world.afterEvents.playerSpawn, "playerSpawn", (ev) => {
     if (greeted.has(player.id)) return;
     greeted.add(player.id);
     // Короткая строка при каждом входе — по ней видно, что скрипты работают
-    player.sendMessage(`§b[Photo Loader]§r ${VERSION} активен, фото в паке: ${PHOTOS.length}`);
+    // и какая именно сборка пака активна в этом мире
+    player.sendMessage(`§b[Photo Loader]§r ${VERSION} (сборка ${BUILD ?? "?"}), фото в паке: ${PHOTOS.length}`);
     if (player.getDynamicProperty("photo:tip_shown")) return;
     player.setDynamicProperty("photo:tip_shown", true);
     player.sendMessage(

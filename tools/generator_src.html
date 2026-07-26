@@ -153,7 +153,7 @@ function geometryFor(p, id) {
   };
 }
 
-function buildDerived() {
+function buildDerived(version) {
   const files = {};
   const n = photos.length;
   files['RP/models/entity/photos.geo.json'] = jsonBytes({
@@ -222,6 +222,7 @@ function buildDerived() {
   });
   files['BP/scripts/photos.js'] = strBytes(
     '// Этот файл сгенерирован generator.html\n' +
+    'export const BUILD = ' + JSON.stringify(version[1] + '.' + version[2]) + ';\n' +
     'export const PHOTOS = [\n' +
     photos.map((p) => '    { name: ' + JSON.stringify(p.name) + ', w: ' + p.w + ', h: ' + p.h + ' }').join(',\n') +
     '\n];\n');
@@ -236,9 +237,7 @@ function b64Bytes(b64) {
   return out;
 }
 
-function templateFiles() {
-  const minutes = Math.floor(Date.now() / 60000);
-  const version = [1, (minutes >> 16) & 0xffff, minutes & 0xffff];
+function templateFiles(version) {
   const files = {};
   for (const [path, f] of Object.entries(TEMPLATE.files)) {
     if (path.endsWith('manifest.json')) {
@@ -321,6 +320,8 @@ document.getElementById('build').addEventListener('click', () => {
   const status = document.getElementById('status');
   try {
     status.textContent = 'Сборка…';
+    const minutes = Math.floor(Date.now() / 60000);
+    const version = [1, (minutes >> 16) & 0xffff, minutes & 0xffff];
     const entries = {};
     const put = (files) => {
       for (const [path, data] of Object.entries(files)) {
@@ -328,15 +329,16 @@ document.getElementById('build').addEventListener('click', () => {
         entries[full] = data;
       }
     };
-    put(templateFiles());
-    put(buildDerived());
+    put(templateFiles(version));
+    put(buildDerived(version));
     const blob = makeZip(entries);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'PhotoLoader.mcaddon';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-    status.textContent = '✅ Готово! Открой скачанный PhotoLoader.mcaddon в Minecraft. Фото: ' +
+    status.textContent = '✅ Готово! Сборка ' + version[1] + '.' + version[2] +
+      ' — эта же цифра появится в чате игры при входе в мир. Открой скачанный PhotoLoader.mcaddon в Minecraft. Фото: ' +
       photos.length + ', размер: ' + (blob.size / 1024 / 1024).toFixed(1) + ' МБ';
   } catch (err) {
     status.textContent = '❌ Ошибка: ' + err;
