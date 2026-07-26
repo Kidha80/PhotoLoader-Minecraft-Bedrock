@@ -1,0 +1,18 @@
+{
+    "format_version": "1.10.0",
+    "animations": {
+        "animation.photo_display.transform": {
+            "loop": true,
+            "bones": {
+                "root": {
+                    "scale": "q.property('photo:size')",
+                    "rotation": [
+                        "q.property('photo:face') == 1 ? -90 : (q.property('photo:face') == 2 ? 90 : 0)",
+                        0,
+                        0
+                    ]
+                }
+            }
+        }
+    }
+}

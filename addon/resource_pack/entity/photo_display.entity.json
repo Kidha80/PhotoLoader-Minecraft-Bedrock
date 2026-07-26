@@ -1,0 +1,29 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:client_entity": {
+    "description": {
+      "identifier": "photo:display",
+      "materials": {
+        "default": "entity_alphatest",
+        "glow": "entity_emissive_alpha"
+      },
+      "textures": {
+        "photo_0": "textures/photos/photo_0"
+      },
+      "geometry": {
+        "photo_0": "geometry.photo_0"
+      },
+      "animations": {
+        "transform": "animation.photo_display.transform"
+      },
+      "scripts": {
+        "animate": [
+          "transform"
+        ]
+      },
+      "render_controllers": [
+        "controller.render.photo_display"
+      ]
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Photo Loader RP",
+    "description": "Фото из галереи в мире Minecraft — ресурсы",
+    "uuid": "bdc24fb3-bcc8-4a36-8ec4-6145bfd0efb4",
+    "version": [
+      1,
+      453,
+      63522
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      0
+    ]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "0db1cd7d-ba00-4286-9f2a-b07da469b24d",
+      "version": [
+        1,
+        453,
+        63522
+      ]
+    }
+  ]
+}

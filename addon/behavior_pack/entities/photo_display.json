@@ -1,0 +1,80 @@
+{
+  "format_version": "1.21.0",
+  "minecraft:entity": {
+    "description": {
+      "identifier": "photo:display",
+      "is_spawnable": false,
+      "is_summonable": true,
+      "properties": {
+        "photo:id": {
+          "type": "int",
+          "range": [
+            0,
+            0
+          ],
+          "default": 0,
+          "client_sync": true
+        },
+        "photo:size": {
+          "type": "float",
+          "range": [
+            0.25,
+            16.0
+          ],
+          "default": 2.0,
+          "client_sync": true
+        },
+        "photo:face": {
+          "type": "int",
+          "range": [
+            0,
+            2
+          ],
+          "default": 0,
+          "client_sync": true
+        },
+        "photo:glow": {
+          "type": "bool",
+          "default": false,
+          "client_sync": true
+        }
+      }
+    },
+    "components": {
+      "minecraft:type_family": {
+        "family": [
+          "photo_display",
+          "inanimate"
+        ]
+      },
+      "minecraft:physics": {
+        "has_gravity": false,
+        "has_collision": false
+      },
+      "minecraft:pushable": {
+        "is_pushable": false,
+        "is_pushable_by_piston": false
+      },
+      "minecraft:collision_box": {
+        "width": 0.9,
+        "height": 0.9
+      },
+      "minecraft:damage_sensor": {
+        "triggers": [
+          {
+            "deals_damage": false
+          }
+        ]
+      },
+      "minecraft:knockback_resistance": {
+        "value": 1.0
+      },
+      "minecraft:fire_immune": true,
+      "minecraft:persistent": {},
+      "minecraft:health": {
+        "value": 10,
+        "max": 10
+      }
+    }
+  }
+}

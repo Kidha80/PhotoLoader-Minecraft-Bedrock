@@ -1,0 +1,28 @@
+{
+  "format_version": "1.10.0",
+  "render_controllers": {
+    "controller.render.photo_display": {
+      "arrays": {
+        "textures": {
+          "Array.photos": [
+            "Texture.photo_0"
+          ]
+        },
+        "geometries": {
+          "Array.geos": [
+            "Geometry.photo_0"
+          ]
+        }
+      },
+      "geometry": "Array.geos[q.property('photo:id')]",
+      "materials": [
+        {
+          "*": "q.property('photo:glow') ? Material.glow : Material.default"
+        }
+      ],
+      "textures": [
+        "Array.photos[q.property('photo:id')]"
+      ]
+    }
+  }
+}
